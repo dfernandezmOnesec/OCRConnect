@@ -1,64 +1,78 @@
-# Python AI Function
+# Función OCR con Python en Azure
 
-This repository is offered to demonstrate a set of resources that will allow you to leverage an Azure Function that uses Tesseract OCR to identify pages within a PDF document that contains the desired text. It will then take that page from the document and save it as a JPEG image in Azure Storage.  When used in conjunction with the [High Throughput Form Recognizer](https://github.com/mmckechney/HighThroughputFormRecognizer) it will allow you to perform very efficient and scalable file processing and form recognition for millons of documents.  
+Este repositorio demuestra un conjunto de recursos que permiten implementar una **Azure Function** en Python que utiliza **Tesseract OCR** para identificar páginas dentro de documentos PDF que contienen texto específico. Luego, esa página se extrae y se guarda como imagen JPEG en Azure Blob Storage.
 
-**NOTE**: If you plan on using this solution in conjunction with the [High Throughput Form Recognizer](https://github.com/mmckechney/HighThroughputFormRecognizer), it is suggested to run the deployment script from that solution with the same `appName`, `location` and `myPublicIp` values that you use to run the `deploy.ps1` in this solution. This will ensure that they work well together.
+Cuando se utiliza en conjunto con el proyecto [High Throughput Form Recognizer](https://github.com/mmckechney/HighThroughputFormRecognizer), permite realizar procesamiento de archivos y reconocimiento de formularios de forma **escalable y eficiente**, incluso para millones de documentos.
 
-## Features
+> **Nota:** Si planeas utilizar esta solución junto con el [High Throughput Form Recognizer](https://github.com/mmckechney/HighThroughputFormRecognizer), se recomienda ejecutar el script de despliegue de ambos repositorios usando los mismos valores para `appName`, `location` y `myPublicIp`, para asegurar su compatibilidad.
 
-The solution leverages the following Azure services:
+---
 
-- **Azure Blob Storage** with two containers
-  - `rawfile` - storage for the raw multipage PDF documents
-  - `incoming` - storage for the single page JPEG images  (named `incoming` to match the expected source container in  [High Throughput Form Recognizer](https://github.com/mmckechney/HighThroughputFormRecognizer))
-- **Azure Service Bus** with two queues
-  - `rawqueue` - identified the "raw" multipage PFD documents that need processing
-  - `formqueue` - where a new queue message will be placed to hand off to the [High Throughput Form Recognizer](https://github.com/mmckechney/HighThroughputFormRecognizer) processing
-- **Azure Functions**
-  - `PythonAIFunction` - Containerized Python function that will use the `rawqueue` to identify PDF files for processing, perform Tesseract OCR to search for the specified keywords, then when found, create a JPEG of that page and save it to the `trimmed` storage container
-- **Azure Container Registry** - because this function is deployed as a Docker container, it will use the container registry as its deployment source
+## Características
+
+Esta solución utiliza los siguientes servicios de Azure:
+
+- **Azure Blob Storage**, con dos contenedores:
+  - `rawfile`: almacena los documentos PDF originales de múltiples páginas.
+  - `incoming`: almacena las imágenes JPEG generadas (una por página relevante). Este nombre coincide con el contenedor esperado por el Form Recognizer.
+
+- **Azure Service Bus**, con dos colas:
+  - `rawqueue`: identifica los documentos PDF que requieren procesamiento.
+  - `formqueue`: recibe los mensajes que activarán el reconocimiento posterior en el Form Recognizer.
+
+- **Azure Functions**:
+  - `PythonAIFunction`: función contenedorizada que escucha en la cola `rawqueue`, procesa el PDF, realiza el OCR con Tesseract y guarda la página como imagen JPEG.
+
+- **Azure Container Registry**:
+  - Repositorio desde el cual se despliega la función como contenedor Docker.
+
+---
+
+## Configuración
+
+La solución utiliza **Azure Managed Identity** para conectarse de forma segura a Storage y enviar mensajes al Service Bus. Esta identidad requiere:
+
+- Rol `Storage Blob Data Contributor` para la cuenta de almacenamiento.
+- Rol `Azure Service Bus Data Owner` para el Service Bus.
+
+### Variables de entorno necesarias (App Settings)
+
+- `KEYWORD_LIST`: lista de palabras clave separadas por comas. La coincidencia distingue mayúsculas y minúsculas.
+- `SERVICEBUS_CONNECTION`: cadena de conexión al Service Bus.
+- `STORAGE_ACCT_URL`: URL de la cuenta de almacenamiento.
+- `SOURCE_CONTAINER_NAME`: nombre del contenedor donde están los PDFs.
+- `DESTINATION_CONTAINER_NAME`: nombre del contenedor donde se guardan las imágenes generadas.
+
+> El archivo `function.json` debe tener configurado el campo `queueName` con el nombre de la cola correspondiente del Service Bus.
+
+---
+
+## Primeros pasos
+
+Para probar la solución de punta a punta necesitas:
+
+- Una suscripción de Azure con permisos para crear recursos.
+- Tu dirección IP pública ([ver aquí](https://www.bing.com/search?q=what+is+my+ip)).
+- Tener instalada la [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli).
+
+### Ejecución del script de despliegue
+
+1. Inicia sesión en Azure CLI:
+
+```powershell
+az login
+Ejecuta el comando de despliegue:
+
+```powershell
+.\deploy.ps1 -appName "<nombreApp>" -location "<regiónAzure>" -myPublicIp "<tu_ip_pública>"```
+Esto creará todos los recursos necesarios para ejecutar la solución.
+
+Reconstrucción de la imagen del contenedor
+La imagen se construye y almacena automáticamente en Azure Container Registry como parte del despliegue. Si necesitas reconstruirla manualmente, usa este comando con Azure Container Registry Tasks:
 
 
-## Configuration
-
-The solution leverages Azure Managed Identity for connections to Azure Storage and for sending messages to the `formqueue`. This identity needs to have `Storage Blob Data Contributor` role to the stogate account and `Azure Service Bus Data Owner` role to the Service Bus. 
-
-The function also require the following App Settings values:
-
-- `KEYWORD_LIST` - comma separated list of keywords to find in the PDF documents. The matching will be case sensitive
-- `SERVICEBUS_CONNECTION` - connection string for the Service Bus. This will be used by the function binding
-- `STORAGE_ACCT_URL` - the URL for the storage account that will be used
-- `SOURCE_CONTAINER_NAME` - the name of the blob container that will have the source PDF documents
-- `DESTINATION_CONTAINER_NAME` - the name of the blob container that the trimmed JPEG files will be saved
-
-The `function.json` file will need to have the `queueName` has the appropriate name of the queue that is located in the service bus
-
-## Get Started
-
-To try out the sample end-to-end process, you will need:
-
-- An Azure subscription that you have privileges to create resources. 
-- Your public IP address. You can easily find it by following [this link](https://www.bing.com/search?q=what+is+my+ip).
-- Have the [Azure CLI installed](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli).
-
-### Running deployment script
-
-1. Login to the Azure CLI:  `az login`
-2. Run the deployment command
-
-    ``` PowerShell
-    .\deploy.ps1 -appName "<less than 6 characters>" -location "<azure region>" -myPublicIp "<your public ip address>"
-
-    ```
-
-    This will create all of the azure resources needed to run the solution.
-
-  
-### Rebuilding the Container Image
-
-The container image is built and added to the Azure Container Registry as part of the deploymet script. However if you need to rebuild the image, use the Azure Container Registry [build tasks](https://docs.microsoft.com/en-us/azure/container-registry/container-registry-tasks-overview) command below. Because the function app is configured with Continuous Delivery, the new image will be automatically retrieved.
-``` bash
-az acr build --registry "<registry name>" --image "<name>:<tag>" --file ./DOCKERFILE . --no-logs
-```
+```az acr build --registry "<nombre_registro>" --image "<nombre>:<tag>" --file ./DOCKERFILE . --no-logs```
+Créditos
+Este repositorio está basado en el trabajo original de mmckechney, adaptado para entornos de procesamiento OCR con Tesseract en Azure y ampliado para integrarse fácilmente en arquitecturas como VEA Connect.
 
 
