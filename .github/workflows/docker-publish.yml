@@ -29,4 +29,4 @@ jobs:
           context: .
           file: .github/workflows/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ocrconnect:latest
+          tags: ghcr.io/dfernandezmonesec/ocrconnect:latest
